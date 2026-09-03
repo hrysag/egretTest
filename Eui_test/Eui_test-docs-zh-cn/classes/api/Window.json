@@ -1,0 +1,22 @@
+{
+	"member": [
+		{
+			"kind": "member",
+			"type": "Platform",
+			"name": "platform",
+			"memberof": "Window",
+			"scope": "instance",
+			"pType": "public"
+		}
+	],
+	"function": [],
+	"globalMember": [],
+	"globalFunction": [],
+	"class": {
+		"kind": "interface",
+		"name": "Window",
+		"memberof": "",
+		"filename": "D:\\Egret_test\\Eui_test\\Eui_test\\src\\Platform.ts"
+	},
+	"pType": "public"
+}

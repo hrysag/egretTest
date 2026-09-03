@@ -1,0 +1,15 @@
+{
+  "design": {
+    "height": "128",
+    "width": "160"
+  },
+  "19fd7916ad1": {
+    "backgroundX": 0,
+    "backgroundY": 0,
+    "backgroundWidth": -1,
+    "backgroundHeight": -1,
+    "useBgImage": false,
+    "useBgColor": false,
+    "backgroundAlpha": 100
+  }
+}
