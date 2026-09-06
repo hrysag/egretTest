@@ -4,4 +4,5 @@
 	height="1136" xmlns:e="http://ns.egret.com/eui" xmlns:w="http://ns.egret.com/wing">
 	<w:Config id="19fd7916ad1"/>
 	<e:Image id="numberImage" touchEnabled="false" alpha="1" source="test_05_png" fillMode="scale" width="160" x="0" height="128" y="0"/>
+	<e:Image id="numberImage2" width="157.006" height="107.717" x="202.773" y="17.976" touchEnabled="false" source="test_02_png"/>
 </e:Skin>

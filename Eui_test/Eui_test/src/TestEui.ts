@@ -1,6 +1,7 @@
 class TestEui extends eui.Component{
     //--這個就是 exml 裡面的id(就是面板當中物件欄位顯示的id)
     public numberImage: eui.Image;
+    public numberImage2:eui.Image;
     private _lastTime:number=0;
     constructor(){
         super();

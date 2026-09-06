@@ -1,5 +1,9 @@
 # Egret 5.4.1 Build 修復紀錄
 
+- 專案：`D:\Egret_test\Eui_test\Eui_test`
+- 內容：環境安裝、建置修復、TypeScript 版本問題、build／run 操作
+- 開發類知識（素材、EXML、EUI 生命週期、Theme）請見同目錄的 `Egret-5.4.1-develop.md`
+
 ## 問題摘要
 
 專案執行 `egret build` 時出現以下錯誤：
@@ -93,830 +97,306 @@ scripts/plugins/package-lock.json
 scripts/plugins/node_modules
 ```
 
-## Egret UI Editor 素材登記
+## TypeScript 版本落差與編輯器紅字
 
-將圖片放入 `resource/assets` 或其子資料夾後，Egret UI Editor 不一定會自動掃描並顯示素材。Editor 的 Assets 面板會依據下列資源設定檔建立素材清單：
+本節整併自 `D:\Egret_test\evnInfo\Egret-5.4.1-TypeScript-tsdk-downgrade.md`。
+處理日期 2026-09-07，已完成，僅餘 1 項無害的 TS2503。
 
-```text
-resource/default.res.json
-```
+### 症狀
 
-因此，素材除了存在於磁碟中，還必須登記在 `default.res.json` 的 `resources` 陣列。例如專案中有以下兩張圖片：
+用 VS Code 開啟 Egret 專案後，`src/` 與 `libs/` 出現大量紅字，但 `egret build` 完全正常。
 
-```text
-resource/assets/05.png
-resource/assets/test/05.png
-```
-
-需要加入：
-
-```json
-{
-  "name": "05_png",
-  "type": "image",
-  "url": "assets/05.png"
-},
-{
-  "name": "test_05_png",
-  "type": "image",
-  "url": "assets/test/05.png"
-}
-```
-
-`name` 是 Egret 使用的資源鍵，必須保持唯一。即使不同資料夾中的圖片檔名相同，也不能使用相同的資源鍵；可在名稱前加入資料夾名稱，例如 `test_05_png`。
-
-如果圖片需要在預載階段載入，還要將對應的資源鍵加入 `groups` 中 `preload` 群組的 `keys`。只需要在 EUI 中引用、並由其他流程按需載入時，可以不加入 `preload`。
-
-修改 `default.res.json` 後，請重新開啟 Egret UI Editor 專案或刷新 Assets 面板，讓 Editor 重新讀取資源設定。
-
-## EXML 與畫面尺寸
-
-### 以 Cocos Creator 的概念理解 EXML
-
-EXML 不是單一 Node，而比較接近 Cocos Creator 的 UI Prefab 或場景中的一組 UI 節點結構。EXML 內的各個 EUI 元件才比較接近 Node 與其 Component。
-
-| Egret EUI | Cocos Creator 概念 |
-| --- | --- |
-| EXML 檔案 | UI Prefab 或一組 UI 節點結構 |
-| `Group` | Node |
-| `Image` | Node + Sprite |
-| `Label` | Node + Label |
-| `Button` | Node + Button |
-| Skin | UI 元件的外觀 Prefab |
-| TypeScript 類別 | 掛在 Node 上的 Component 腳本 |
-| `default.thm.json` | UI 類別與 Prefab／Skin 的對應設定 |
-| `default.res.json` | 資源索引或 Asset Bundle 設定 |
-
-例如：
-
-```xml
-<e:Skin xmlns:e="http://ns.egret.com/eui">
-    <e:Group>
-        <e:Image source="test_05_png"/>
-        <e:Label text="Hello"/>
-    </e:Group>
-</e:Skin>
-```
-
-可用 Cocos Creator 的概念理解為：
+代表性錯誤：
 
 ```text
-Prefab
-└─ Group（Node）
-   ├─ Image（Node + Sprite）
-   └─ Label（Node + Label）
+Argument of type '(e: ResourceEvent) => void' is not assignable to parameter of type '(event: Event) => void'.
+  Types of parameters 'e' and 'event' are incompatible.
+    Type 'Event' is missing the following properties from type 'ResourceEvent': itemsLoaded, itemsTotal, groupName, resItem
 ```
-
-### EXML 尺寸是否需要等於輸出解析度
-
-EXML 的尺寸不一定要與輸出螢幕解析度相同，應依它在介面中的用途決定。
-
-如果 EXML 代表完整畫面，可以使用設計解析度進行編輯，但執行時通常讓根容器跟隨舞台伸縮：
-
-```xml
-<e:Skin
-    xmlns:e="http://ns.egret.com/eui"
-    width="100%"
-    height="100%">
-```
-
-也可以在對應的 TypeScript 元件中設定：
-
-```typescript
-this.percentWidth = 100;
-this.percentHeight = 100;
-```
-
-如果 EXML 是按鈕、彈窗、列表項目或其他局部 UI 元件，只需設定元件本身所需的尺寸，不必設定成整個螢幕大小：
-
-```xml
-<e:Skin width="200" height="80">
-```
-
-對照 Cocos Creator：
-
-- 全畫面 EXML：類似 Canvas 下的全螢幕 UI 根節點。
-- 局部 EXML：類似 Button、Dialog、Item 等 Prefab。
-- Egret 舞台尺寸：類似 Canvas 或設計解析度。
-- 百分比尺寸及 `left`、`right`、`top`、`bottom`：類似 Widget 對齊。
-
-原則上只有全畫面容器需要填滿舞台，其他 EXML 應保留各自合理的元件尺寸。
-
-### EXML 元件與 TypeScript 欄位綁定
-
-如果需要在 TypeScript 中操作 EXML 內的元件，必須替 EXML 元件設定 `id`，並在對應的 EUI Component 類別中宣告同名欄位。
-
-EXML：
-
-```xml
-<e:Image
-    id="numberImage"
-    touchEnabled="false"
-    alpha="1"
-    source="test_05_png"
-    fillMode="scale"
-    width="160"
-    height="128"
-    x="0"
-    y="0"/>
-```
-
-TypeScript：
-
-```typescript
-class TestEui extends eui.Component {
-    public numberImage: eui.Image;
-
-    public constructor() {
-        super();
-        this.skinName = "skins.TestImg";
-    }
-
-    protected childrenCreated(): void {
-        super.childrenCreated();
-        this.numberImage.alpha = 1;
-    }
-}
-```
-
-Egret 5.4.1 使用的舊版 TypeScript 不支援較新的 `override` 關鍵字，因此應使用：
-
-```typescript
-protected childrenCreated(): void {
-```
-
-不要寫成：
-
-```typescript
-protected override childrenCreated(): void {
-```
-
-### EXML XML 屬性語法
-
-EXML 是 XML 格式，元素的屬性之間只能使用空格分隔，不能加入 JavaScript 或 JSON 風格的逗號。
-
-下列寫法會造成 `#2002: EXML parsing error`：
-
-```xml
-<e:Image id="numberImage",touchEnabled="false"/>
-```
-
-錯誤位置是 `id` 屬性後方的逗號。正確寫法為：
-
-```xml
-<e:Image id="numberImage" touchEnabled="false"/>
-```
-
-當錯誤訊息顯示 `attributes construct error` 時，應優先檢查該行是否有多餘逗號、缺少引號、重複屬性或未正確關閉標籤。
-
-## Egret 5.4.1 EXML 屬性速查
-
-EXML 沒有一份所有元件完全共用的固定屬性表；實際可設定項目取決於元素所對應的 EUI 類別及其父類別。下列整理目前專案最常使用的屬性。
-
-### 識別、位置與尺寸
-
-| 屬性 | 用途 |
-| --- | --- |
-| `id` | EUI Skin Part 識別，將元件注入 TypeScript 的同名欄位 |
-| `name` | DisplayObject 名稱，供 `getChildByName()` 搜尋 |
-| `x`、`y` | 相對父容器的位置 |
-| `width`、`height` | 固定尺寸，也可填入 `100%` |
-| `percentWidth`、`percentHeight` | 相對父容器的百分比尺寸 |
-| `left`、`right`、`top`、`bottom` | 相對父容器的四邊約束，類似 Cocos Widget |
-| `horizontalCenter`、`verticalCenter` | 相對父容器置中及偏移 |
-| `minWidth`、`minHeight` | Layout 可使用的最小尺寸 |
-| `maxWidth`、`maxHeight` | Layout 可使用的最大尺寸 |
-| `includeInLayout` | 是否參與父容器的 Layout 計算 |
-
-同時設定 `left` 與 `right` 時，寬度會由父容器決定；同時設定 `top` 與 `bottom` 時，高度會由父容器決定。
-
-### 顯示變換與互動
-
-| 屬性 | 用途 |
-| --- | --- |
-| `scaleX`、`scaleY` | 水平及垂直縮放；`scaleX="-1"` 可水平翻轉 |
-| `anchorOffsetX`、`anchorOffsetY` | 縮放與旋轉使用的錨點 |
-| `rotation` | 旋轉角度 |
-| `skewX`、`skewY` | 傾斜角度 |
-| `alpha` | 透明度，範圍通常為 0～1 |
-| `visible` | 是否顯示 |
-| `touchEnabled` | 元件本身是否接收觸控 |
-| `touchChildren` | 容器內的子元件是否接收觸控 |
-| `blendMode` | 混合模式，例如 `normal`、`add`、`erase` |
-
-### Skin 與 Component
-
-Skin 根節點常用：
 
 ```text
-class, width, height, minWidth, minHeight, maxWidth, maxHeight, states
+Property 'textField' has no initializer and is not definitely assigned in the constructor.
 ```
 
-Component 常用：
+### 環境盤點（實測）
 
-```text
-skinName, enabled, currentState
-```
-
-`class="skins.TestImg"` 是 Skin 的完整名稱，TypeScript 可透過下列方式綁定：
-
-```typescript
-this.skinName = "skins.TestImg";
-```
-
-### Image
-
-```text
-source, fillMode, scale9Grid, smoothing, texture
-```
-
-範例：
-
-```xml
-<e:Image
-    id="numberImage"
-    source="test_05_png"
-    width="160"
-    height="128"
-    fillMode="scale"
-    smoothing="true"/>
-```
-
-`source` 通常填入 `default.res.json` 中登記的資源鍵。`fillMode` 常見值為 `scale`、`repeat`、`clip`。`scale9Grid` 格式為 `x,y,width,height`，適合需要伸縮的按鈕或面板背景。
-
-### Label
-
-```text
-text, size, textColor, fontFamily, bold, italic,
-textAlign, verticalAlign, multiline, wordWrap, lineSpacing,
-stroke, strokeColor, maxChars, displayAsPassword
-```
-
-`textAlign` 常用值為 `left`、`center`、`right`；`verticalAlign` 常用值為 `top`、`middle`、`bottom`。
-
-### BitmapLabel
-
-```text
-text, font, letterSpacing, lineSpacing, textAlign, verticalAlign
-```
-
-`BitmapLabel` 使用點陣字型資源，適合數字或固定字元集。
-
-### Group 與 Layout
-
-Group 常用：
-
-```text
-layout, scrollH, scrollV, contentWidth, contentHeight, elementsContent
-```
-
-`VerticalLayout` 與 `HorizontalLayout` 常用：
-
-```text
-gap, horizontalAlign, verticalAlign,
-paddingLeft, paddingRight, paddingTop, paddingBottom,
-useVirtualLayout
-```
-
-`TileLayout` 常用：
-
-```text
-requestedColumnCount, requestedRowCount,
-columnWidth, rowHeight, horizontalGap, verticalGap,
-orientation, columnAlign, rowAlign
-```
-
-Layout 範例：
-
-```xml
-<e:Group>
-    <e:layout>
-        <e:VerticalLayout
-            gap="10"
-            horizontalAlign="center"
-            verticalAlign="middle"
-            paddingLeft="10"
-            paddingRight="10"
-            paddingTop="10"
-            paddingBottom="10"/>
-    </e:layout>
-</e:Group>
-```
-
-### Button、ToggleButton、CheckBox、RadioButton
-
-Button：
-
-```text
-label, icon, enabled, skinName, autoRepeat
-```
-
-ToggleButton 與 CheckBox 額外常用：
-
-```text
-selected
-```
-
-RadioButton 常用：
-
-```text
-label, value, group, groupName, selected
-```
-
-### TextInput
-
-```text
-text, prompt, maxChars, displayAsPassword,
-restrict, editable, textColor, promptColor
-```
-
-### Rect
-
-```text
-fillColor, fillAlpha, strokeColor, strokeAlpha,
-strokeWeight, ellipseWidth, ellipseHeight
-```
-
-範例：
-
-```xml
-<e:Rect
-    width="200"
-    height="100"
-    fillColor="0xFF0000"
-    fillAlpha="1"
-    strokeColor="0xFFFFFF"
-    strokeWeight="2"
-    ellipseWidth="20"
-    ellipseHeight="20"/>
-```
-
-### ProgressBar 與 Slider
-
-ProgressBar：
-
-```text
-minimum, maximum, value, slideDuration, direction, labelFunction
-```
-
-HSlider 與 VSlider：
-
-```text
-minimum, maximum, value, snapInterval, liveDragging, pendingValue
-```
-
-### Scroller
-
-```text
-viewport, scrollPolicyH, scrollPolicyV, bounces, throwSpeed
-```
-
-捲動策略常用值為 `auto`、`on`、`off`。
-
-### List 與 DataGroup
-
-```text
-dataProvider, itemRenderer, itemRendererSkinName,
-selectedIndex, selectedItem, selectedIndices, selectedItems,
-allowMultipleSelection, requireSelection, layout, useVirtualLayout
-```
-
-### 狀態屬性
-
-可讓同一個元件在不同狀態套用不同屬性：
-
-```xml
-<e:Image
-    source="button_up_png"
-    source.down="button_down_png"
-    alpha.disabled="0.5"/>
-```
-
-也可以使用：
-
-```text
-includeIn, excludeFrom
-```
-
-控制元件只在哪些狀態出現。常見狀態包括 `up`、`down`、`disabled`、`selected`、`normal`，實際狀態由元件及 Skin 定義決定。
-
-### 事件
-
-EXML 可以指定事件處理函式，例如：
-
-```xml
-<e:Button label="確認" click="onConfirm(event)"/>
-```
-
-目前專案更建議在 TypeScript 中註冊，以取得較清楚的型別及生命週期管理：
-
-```typescript
-this.confirmButton.addEventListener(
-    egret.TouchEvent.TOUCH_TAP,
-    this.onConfirm,
-    this
-);
-```
-
-### 最常用屬性摘要
-
-```text
-id, name, x, y, width, height,
-left, right, top, bottom,
-horizontalCenter, verticalCenter,
-percentWidth, percentHeight,
-anchorOffsetX, anchorOffsetY,
-scaleX, scaleY, rotation,
-alpha, visible, touchEnabled,
-includeInLayout, source, skinName,
-text, label, selected, enabled
-```
-
-## Egret EUI 生命週期與 Cocos Creator 對照
-
-Egret 沒有像 Cocos Creator 一樣完整且固定的 `onLoad()`、`start()`、`update()`、`onDestroy()` Component 生命週期，需要使用 EUI 方法、舞台事件及 Ticker 組合出相同流程。
-
-| Cocos Creator | Egret EUI 對應方式 |
-| --- | --- |
-| `constructor` | `constructor()` |
-| `onLoad()` | `childrenCreated()` |
-| Prefab 欄位綁定 | EXML `id`、`partAdded()`、Skin Part |
-| `onEnable()` | `egret.Event.ADDED_TO_STAGE` |
-| `start()` | 第一次 `ADDED_TO_STAGE` 時自行呼叫 |
-| `update(dt)` | `egret.startTick()` 或 `ENTER_FRAME` |
-| `onDisable()` | `egret.Event.REMOVED_FROM_STAGE` |
-| `onDestroy()` | 沒有完全對應，需要自行實作 `dispose()` |
-
-### 生命週期順序
-
-```text
-constructor
-    ↓
-設定 skinName
-    ↓
-建立 EXML 元件
-    ↓
-partAdded（Skin Part）
-    ↓
-childrenCreated
-    ↓
-ADDED_TO_STAGE
-    ↓
-startTick / ENTER_FRAME
-    ↓
-REMOVED_FROM_STAGE
-    ↓
-stopTick
-    ↓
-自行 dispose
-```
-
-`constructor()` 適合設定 `skinName`、初始化一般變數及註冊舞台事件。此時不應假設 EXML 的 `id` 欄位已經存在。
-
-`childrenCreated()` 會在 EXML 與 Skin Part 建立完成後呼叫，適合操作透過 `id` 綁定的元件及註冊 UI 事件，概念接近 Cocos 的 `onLoad()`。
-
-`ADDED_TO_STAGE` 在元件真正加入顯示舞台時觸發，適合啟動 Tick、Timer、Tween 或其他更新流程。物件從舞台移除後再次加入時，這個事件會再次觸發。
-
-`REMOVED_FROM_STAGE` 適合停止 Tick、Timer、Tween 及暫時性事件。從舞台移除不等於銷毀，物件可能稍後再次加入。
-
-### startTick 與 Cocos update(dt)
-
-`egret.startTick()` 是最接近 Cocos Creator `update(dt)` 的功能，但 Egret 傳入的參數是引擎啟動至今的總毫秒時間，不是兩幀之間的秒數，因此需要自行計算 `dt`。
-
-```typescript
-class TestEui extends eui.Component {
-    public numberImage: eui.Image;
-
-    private lastTime: number = 0;
-    private initialized: boolean = false;
-
-    public constructor() {
-        super();
-        this.skinName = "skins.TestImg";
-
-        this.addEventListener(
-            egret.Event.ADDED_TO_STAGE,
-            this.onAddedToStage,
-            this
-        );
-
-        this.addEventListener(
-            egret.Event.REMOVED_FROM_STAGE,
-            this.onRemovedFromStage,
-            this
-        );
-    }
-
-    protected childrenCreated(): void {
-        super.childrenCreated();
-        this.numberImage.alpha = 1;
-    }
-
-    private onAddedToStage(): void {
-        if (!this.initialized) {
-            this.initialized = true;
-            this.start();
-        }
-
-        this.lastTime = egret.getTimer();
-        egret.startTick(this.update, this);
-    }
-
-    private start(): void {
-        console.log("start");
-    }
-
-    private update(timeStamp: number): boolean {
-        const dt: number = (timeStamp - this.lastTime) / 1000;
-        this.lastTime = timeStamp;
-
-        this.numberImage.rotation += 90 * dt;
-
-        return false;
-    }
-
-    private onRemovedFromStage(): void {
-        egret.stopTick(this.update, this);
-    }
-
-    public dispose(): void {
-        egret.stopTick(this.update, this);
-
-        this.removeEventListener(
-            egret.Event.ADDED_TO_STAGE,
-            this.onAddedToStage,
-            this
-        );
-
-        this.removeEventListener(
-            egret.Event.REMOVED_FROM_STAGE,
-            this.onRemovedFromStage,
-            this
-        );
-    }
-}
-```
-
-Egret 與 Cocos 更新參數的差異：
-
-| Cocos Creator | Egret `startTick()` |
-| --- | --- |
-| 自動呼叫 `update(dt)` | 必須手動呼叫 `egret.startTick()` |
-| `dt` 是上一幀至今的秒數 | `timeStamp` 是引擎啟動至今的總毫秒數 |
-| Component 停用後由引擎停止更新 | 必須手動呼叫 `egret.stopTick()` |
-| `update()` 沒有回傳值 | Tick callback 必須回傳 `boolean` |
-
-Tick callback 回傳 `false` 代表使用正常的引擎渲染流程，通常應使用此值。回傳 `true` 會要求 Egret 在 callback 完成後立即重繪，除非有特殊需要，不建議每幀使用。
-
-### ENTER_FRAME
-
-也可以使用 `ENTER_FRAME`：
-
-```typescript
-this.addEventListener(
-    egret.Event.ENTER_FRAME,
-    this.onEnterFrame,
-    this
-);
-```
-
-停止時必須解除：
-
-```typescript
-this.removeEventListener(
-    egret.Event.ENTER_FRAME,
-    this.onEnterFrame,
-    this
-);
-```
-
-`ENTER_FRAME` 不直接提供 `dt`，仍需使用 `egret.getTimer()` 自行計算。
-
-### 清理原則
-
-Egret 的 Ticker 會保存 callback 與 `thisObject`。把元件從舞台移除不會自動停止 `startTick()`，如果沒有呼叫 `stopTick()`，可能造成元件離開畫面後仍持續更新、重複註冊或無法釋放記憶體。
-
-建議統一使用下列結構：
-
-```text
-ADDED_TO_STAGE   → startTick()
-REMOVED_FROM_STAGE → stopTick()
-永久不再使用元件 → dispose()
-```
-
-## Egret 模組、Launcher 專案類型與 EUI Theme
-
-### 透過 egretProperties.json 增加模組
-
-建立專案時即使沒有在 Egret Launcher 勾選某個擴充庫，之後仍可在 `egretProperties.json` 的 `modules` 陣列中手動加入。
-
-例如加入 DragonBones：
-
-```json
-{
-  "name": "dragonBones",
-  "path": "../../egret-core-master/egret-core-master/build/dragonBones"
-}
-```
-
-加入 MovieClip 所在的 Game 模組：
-
-```json
-{
-  "name": "game",
-  "path": "../../egret-core-master/egret-core-master/build/game"
-}
-```
-
-加入 EUI：
-
-```json
-{
-  "name": "eui",
-  "path": "../../egret-core-master/egret-core-master/build/eui"
-}
-```
-
-修改後需執行 clean/build，讓專案同步對應的 JavaScript Runtime 與 TypeScript 型別至 `libs/modules`。
-
-在 Launcher 服務已停止的環境中，建議明確填寫本機 `path`，不要只填模組名稱，否則工具鏈可能再次嘗試透過 Launcher 查詢已安裝的引擎版本。
-
-加入模組只會取得 Runtime 與 API，不會自動加入範例程式或素材。例如加入 `dragonBones` 不會自動產生 `skeleton.json`、`texture.json`、`texture.png` 或範例類別。
-
-### Launcher 建立 EUI 專案與 Game 專案的差異
-
-Launcher 的「專案類型」和「擴充庫勾選」是兩個不同層級：
-
-```text
-擴充庫勾選
-= 決定專案有哪些 Runtime 與 API
-
-專案類型
-= 決定建立時使用哪一套目錄、設定、範本程式及資源
-```
-
-在普通 Game 專案勾選 EUI，只代表專案可以使用 `eui.Button`、`eui.Component`、`eui.Image` 等 API，不代表它會變成完整的 EUI 專案範本。
-
-| 項目 | EUI 專案範本 | Game 專案加 EUI 模組 |
+| 項目 | 數值 | 來源 |
 | --- | --- | --- |
-| `libs/modules/eui` | 有 | 有 |
-| EUI Runtime／型別 | 有 | 有 |
-| `resource/eui_skins` | 自動建立 | 通常不建立 |
-| `resource/default.thm.json` | 自動建立 | 通常不建立 |
-| `.wing/exml.json` | 自動建立或由 Editor 維護 | 通常不建立 |
-| `egretProperties.eui.exmlRoot` | 有 | 通常沒有 |
-| `Main extends eui.UILayer` | 預設使用 | 通常仍為 `egret.DisplayObjectContainer` |
-| `loadTheme()` | 預設提供 | 需要自行加入 |
-| 預設元件 Skin | 有 | 沒有 |
+| Node.js | 24.19.0 | `C:\Program Files\nodejs\node.exe` |
+| npm | 11.17.0 | `C:\Program Files\nodejs\npm.cmd` |
+| npm 全域路徑 | `C:\Users\user\AppData\Roaming\npm` | `npm config get prefix` |
+| Egret CLI | 5.4.1 | 全域 npm 套件（原本唯一一個） |
+| **Egret 內建編譯器** | **typescript-plus 2.4.2（= TS 2.4，2017/07）** | `egret-core-master/tools/lib/typescript-plus` |
+| VS Code | 1.134.0 | `%LOCALAPPDATA%\Programs\Microsoft VS Code\110a328ea5` |
+| **VS Code 內建 TypeScript** | **6.0.3** | 同上 `resources/app/extensions/node_modules/typescript` |
+| 專案 tsconfig | 沒有 `strict` 設定，`target: es5` | `tsconfig.json` |
+| VS Code 使用者設定 | 不存在（`%APPDATA%\Code\User\settings.json`） | — |
 
-`resource/eui_skins` 不是 EUI 模組本身的內容，而是 EUI 專案範本產生的專案資產。因此普通 Game 專案即使勾選 EUI，也可能只有 `eui.js` 與 `eui.d.ts`，沒有任何 EXML Skin。
+專案沒有 `package.json`、沒有本地 `node_modules`，這是 Egret 專案的正常型態。
 
-### eui.Theme 的用途
+### 根因
 
-`eui.Theme` 是 EUI 模組提供的正式類別，用來讀取 Theme 設定並註冊 Skin：
+三層版本落差：
 
-```typescript
-const theme = new eui.Theme(
-    "resource/default.thm.json",
-    this.stage
-);
+```text
+Egret 執行的編譯器   TS 2.4.2   ← 專案程式碼是為它寫的
+VS Code 顯示的紅字   TS 6.0.3   ← 差了 9 年的檢查規則
 ```
 
-`default.thm.json` 主要負責兩件事。
+**關鍵：TypeScript 6/7 把 `strict` 的預設值改成 `true`。**
 
-第一，將 EUI 元件類別對應到預設 Skin：
+實測（TS 7.0.2 + 專案原本的 tsconfig，不加任何額外參數）：
+
+```text
+3 × TS2564   Property has no initializer
+2 × TS2345   ResourceEvent 不可指派
+```
+
+同一份 tsconfig 加上 `--strict false`：
+
+```text
+0 × TS2564
+0 × TS2345
+```
+
+對照 TS 5.9.3 + 同一份 tsconfig：必須**手動加** `--strict` 才會出現這些錯誤，預設是乾淨的。
+
+因此紅字不是專案設定問題，也不是 VS Code 設定問題（機器上根本沒有 `settings.json`），
+而是新版 TypeScript 的預設值改變。
+
+#### 各錯誤對應的檢查與引入版本
+
+| 語法／檢查 | 需要 TS | Egret 的 TS 2.4 |
+| --- | --- | --- |
+| `strictFunctionTypes`（TS2345） | 2.6 | 不認識此選項 |
+| `strictPropertyInitialization`（TS2564） | 2.7 | 不認識此選項 |
+| `x!: T` 明確賦值斷言 | 2.7 | **語法都剖析不了** |
+| `?.` / `??` | 3.7 | 不支援 |
+| `override` 關鍵字 | 4.3 | 不支援（既有文件已記錄） |
+
+實測 Egret 編譯器對 `public x!: string;` 的反應：
+
+```text
+typescript-plus 內含的 TS 版本: 2.4.2
+解析 `public x!: string;` → '=' expected. / Expression expected.
+是否支援 strictPropertyInitialization 選項: false
+是否支援 strictFunctionTypes 選項: false
+```
+
+### 為什麼「改 tsconfig」不夠
+
+在 `tsconfig.json` 加 `"strict": false` 只能消掉 TS2564 與 TS2345，
+但 TS 6/7 還有兩個用 flag 關不掉的硬傷：
+
+| 錯誤 | 內容 | 能否用 flag 關閉 |
+| --- | --- | --- |
+| TS5108 | `Option 'target=ES5' has been removed` | 否。TS 6/7 移除 ES5 目標，整份 tsconfig 第一關就過不了 |
+| TS1540 | `declare module egret {` 必須改用 `namespace` | 否。這是 **Egret 官方 `.d.ts` 的寫法**，共 26 處，不可能去改引擎型別檔 |
+
+實測 TS 7.0.2 + `--strict false` 之後仍然剩下：
+
+```text
+26 × TS1540
+ 1 × TS2503   (NodeJS namespace，無害)
+```
+
+**結論：唯一完整的解法是把 VS Code 使用的 TypeScript（tsdk）降級，不是改專案設定。**
+
+### 選定的 tsdk 版本
+
+**TypeScript 5.9.3**，理由：
+
+- 認得 `target: es5`（TS 6/7 已移除）
+- 認得 `declare module egret {`（TS 6/7 報 TS1540）
+- `strict` 預設為 `false`（TS 6/7 預設為 `true`）
+- VS Code 1.134 的 tsserver 協定可正常驅動（TS 2.x 太舊，帶不動）
+
+實測 TS 5.9.3 + 專案原本的 tsconfig，全專案結果：
+
+```text
+1 × TS2503   libs/modules/egret/egret.d.ts(1,21) Cannot find namespace 'NodeJS'
+```
+
+僅此一項，且無害（來自 `declare var global: NodeJS.Global` 搭配 tsconfig 的 `"types": []`）。
+
+### 執行步驟
+
+#### 步驟 1：安裝全域 TypeScript 5.9.3 —— 已完成
+
+```powershell
+npm.cmd i -g typescript@5.9.3
+```
+
+結果：
+
+```text
+added 1 package in 1s
+```
+
+驗證：
+
+```text
+版本: 5.9.3
+路徑: C:\Users\user\AppData\Roaming\npm\node_modules\typescript\lib\tsserver.js
+```
+
+#### 步驟 2：建立 `.vscode/settings.json` —— 已完成
+
+在專案根目錄 `D:\Egret_test\Eui_test\Eui_test\.vscode\settings.json` 建立：
 
 ```json
 {
-  "skins": {
-    "eui.Button": "resource/eui_skins/ButtonSkin.exml",
-    "eui.CheckBox": "resource/eui_skins/CheckBoxSkin.exml"
+  "typescript.tsdk": "C:/Users/user/AppData/Roaming/npm/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}
+```
+
+放工作區而非使用者層級的理由：只影響 Egret 專案，不會把機器上其他專案一併拖回 5.9。
+
+`typescript.enablePromptUseWorkspaceTsdk` 的作用只是讓 VS Code 跳出「是否改用工作區版本」的
+詢問；真正決定用哪個版本的是 `typescript.tsdk`。
+
+#### 步驟 3：讓 VS Code 切換版本 —— 已完成
+
+`Ctrl+Shift+P` → `TypeScript: Select TypeScript Version` → **Use Workspace Version (5.9.3)**。
+（VS Code 若自行跳出詢問視窗，選 Use Workspace Version 即可。）
+
+#### 步驟 4：驗證 —— 已完成
+
+**驗證一：用全域 5.9.3 對專案實跑**
+
+```text
+Version 5.9.3
+libs/modules/egret/egret.d.ts(1,21): error TS2503: Cannot find namespace 'NodeJS'.
+```
+
+全專案僅剩此 1 項。原本的 TS2564 × 3、TS2345 × 2 全部消失。
+
+**驗證二：確認 VS Code 實際載入的 tsserver**
+
+用下列指令查 VS Code 各程序實際載入的 tsserver 路徑（tsserver 跑在 `Code.exe` 內，
+不是獨立的 `node.exe`，所以要查 `Code.exe`）：
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='Code.exe'" |
+  Where-Object { $_.CommandLine -like '*tsserver*' } |
+  ForEach-Object {
+    if ($_.CommandLine -match '([A-Za-z]:\[^"]*?tsserver\.js)') {
+      Write-Output "PID $($_.ProcessId): $($matches[1])"
+    }
   }
-}
 ```
 
-這樣建立 `new eui.Button()` 時，EUI 才知道應使用哪一個按鈕 Skin。
-
-第二，登記自訂 EXML：
-
-```json
-{
-  "exmls": [
-    "resource/eui_skins/eui_img/TestImg.exml"
-  ]
-}
-```
-
-Theme 載入完成後，程式即可使用：
-
-```typescript
-this.skinName = "skins.TestImg";
-```
-
-### loadTheme 不是引擎固定生命週期
-
-`loadTheme()` 通常是 EUI 專案範本在 `Main.ts` 中自行定義的 Promise 包裝方法，不是父類別提供、也不是 Egret 自動呼叫的生命週期函式。
-
-```typescript
-private loadTheme() {
-    return new Promise<void>((resolve, reject) => {
-        const theme = new eui.Theme(
-            "resource/default.thm.json",
-            this.stage
-        );
-
-        theme.addEventListener(
-            eui.UIEvent.COMPLETE,
-            () => {
-                resolve();
-            },
-            this
-        );
-    });
-}
-```
-
-任何已加入 EUI 模組的專案都可以自行加入相同方法。
-
-### 在 Game 專案中使用 EUI
-
-Game 專案若只需要用程式建立簡單 UI，可先加入 EUI 模組，然後直接建立不依賴複雜 Skin 的元件：
-
-```typescript
-const group = new eui.Group();
-const image = new eui.Image();
-const label = new eui.Label();
-
-label.text = "Hello";
-group.addChild(image);
-group.addChild(label);
-this.addChild(group);
-```
-
-如果 Game 專案要使用完整 EXML／Theme 工作流，至少需要：
-
-1. 在 `egretProperties.json` 加入 `eui` 模組及本機路徑。
-2. 建立 `resource/eui_skins`。
-3. 建立 `resource/default.thm.json`。
-4. 在 `egretProperties.json` 加入 `eui.exmlRoot`。
-5. 在 `Main.ts` 建立並等待 `eui.Theme` 載入完成。
-6. 確認 build 設定啟用了 `ExmlPlugin` 或相容的 EUI Compiler。
-7. 視需求讓 `Main` 繼承 `eui.UILayer`。
-8. 加入 Button、CheckBox、Panel 等元件需要的預設 Skin。
-9. 讓 Egret UI Editor 建立或維護 `.wing/exml.json`。
-10. 執行 build 並確認 EXML 已被編譯。
-
-`Main` 不一定非得繼承 `eui.UILayer`；`egret.DisplayObjectContainer` 也能加入 EUI 顯示物件。`eui.UILayer` 只是更符合全畫面 EUI 根容器的預設使用方式。
-
-### 沒有 Theme 時能否使用 EUI
-
-可以使用部分純程式建立的元件，例如：
+結果：
 
 ```text
-eui.Group
-eui.Image
-eui.Label
+PID  6136: C:\Users\user\AppData\Roaming\npm\node_modules\typescript\lib\tsserver.js        ← 5.9.3
+PID 22556: C:\Users\user\AppData\Roaming\npm\node_modules\typescript\lib\tsserver.js        ← 5.9.3
+PID 24292: ...\Microsoft VS Code\110a328ea5\resources\app\extensions\...\tsserver.js        ← 內建 6.0.3
+PID 33972: ...\Microsoft VS Code\110a328ea5\resources\app\extensions\...\tsserver.js        ← 內建 6.0.3
 ```
 
-但下列元件通常依賴 Skin：
+前兩個是本 Egret 工作區，已切換至 5.9.3。後兩個是同時開啟的其他 VS Code 視窗，
+仍使用內建 6.0.3 —— 這正是工作區層級設定的預期效果，其他專案不受影響。
+
+#### 殘留項目
+
+`libs/modules/egret/egret.d.ts` 第 1 行仍有一條紅線：
 
 ```text
-Button
-CheckBox
-RadioButton
-TextInput
-Panel
-ProgressBar
-Scroller
-Slider
-ToggleSwitch
+TS2503: Cannot find namespace 'NodeJS'.
 ```
 
-如果沒有 Theme 或沒有手動指定 `skinName`，它們可能只有邏輯、沒有完整外觀或缺少必要的 Skin Part。
+來源是 `declare var global: NodeJS.Global;` 搭配 tsconfig 的 `"types": []`，
+使 `NodeJS` 型別無處可尋。不影響建置，尚未處理。
 
-### 自訂 Skin 可以不經 Theme 嗎
+### PowerShell 執行原則的坑
 
-可以，但前提是 Skin 已被 EXML 編譯並且其類別可在執行時取得。這時可以直接指定 Skin 類別或實例：
+在 PowerShell 執行 `npm i -g ...` 會失敗：
+
+```text
+npm : 因為這個系統上已停用指令碼執行，所以無法載入 C:\Program Files\nodejs\npm.ps1 檔案。
+```
+
+原因：本機執行原則各層級皆為 `Undefined`，Windows 用戶端預設等同 `Restricted`，
+所有 `.ps1` 一律不准執行。
+
+```text
+        Scope ExecutionPolicy
+   UserPolicy       Undefined
+  CurrentUser       Undefined
+ LocalMachine       Undefined
+```
+
+npm 在 Windows 同時安裝 `npm.cmd`（批次檔）與 `npm.ps1`（PowerShell 腳本）。
+PowerShell 優先挑 `.ps1` 而被擋；cmd.exe 與 Git Bash 挑 `.cmd`，不受影響。
+
+**解法：明確指定 `.cmd`，不需要改任何系統設定。**
+
+```powershell
+npm.cmd i -g typescript@5.9.3
+```
+
+同理，`egret` 在 Git Bash 中找不到時，可用完整路徑 `%APPDATA%\npm\egret.cmd`。
+
+（另一個選項是 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`，
+但那是變更帳號安全原則，本案用 `.cmd` 即可解決，沒有必要。）
+
+### 重要注意事項
+
+#### 不要用 `!` 消紅字
+
+網路上對 TS2564 最常見的建議是加明確賦值斷言：
 
 ```typescript
-component.skinName = skins.TestImg;
+public numberImage!: eui.Image;   // 不要在 Egret 5.4.1 這樣寫
 ```
 
-或：
+編輯器紅字會消失，但 **`egret build` 會直接失敗**，因為 Egret 的 TS 2.4.2
+連這個語法都剖析不了（TS 2.7 才引入）。這是反向陷阱。
+
+#### 這些紅字不影響建置
+
+處理前已實測 `egret build`，零錯誤：
+
+```text
+您正在使用白鹭编译器 5.4.1 版本
+index.html emitted
+main.js emitted
+Total project compiling time: 32.876 second
+```
+
+紅字純粹是編輯器語言服務的顯示問題。
+
+#### EXML 綁定欄位必然觸發 TS2564
 
 ```typescript
-component.skinName = new skins.TestImg();
+public numberImage: eui.Image;   // exml 裡的 id
 ```
 
-如果使用字串：
+這類欄位由 eui 在套用 `skinName` 時於執行期注入，TypeScript 程式碼從頭到尾不會賦值，
+在 `strict` 下結構上不可能滿足檢查。任何 EUI 專案只要吃到 `strict` 都會被掃出一整排。
 
-```typescript
-component.skinName = "skins.TestImg";
-```
+### 與其他文件的關係
 
-則必須確保該 Skin 已被編譯、載入及註冊，否則執行時會找不到類別。
+同目錄的 `Egret-5.4.1-develop.md` 在「EXML 元件與 TypeScript 欄位綁定」記錄了一條同源問題：
 
-技術上可以繞過 Theme，但 Theme 能集中管理預設 Skin、EXML 清單及載入順序。對目前的 Egret 5.4.1 EXML 工作流而言，統一使用 `default.thm.json` 通常最穩定。
+> Egret 5.4.1 使用的舊版 TypeScript 不支援較新的 `override` 關鍵字
+
+該條只寫了症狀，沒有寫出根因版號（TS 2.4.2），因此無法推廣到其他症狀。
+本節補上完整的版本矩陣。
+
+#### 待修正項目（尚未處理）
+
+1. 本文件仍有 7 處殘留 `D:\Egret_test\Test_build` 路徑（第 48、80、82、406、445、448、490 行），
+   是從 Test_build 複製擴寫留下的，正確路徑應為 `D:\Egret_test\Eui_test\Eui_test`。
+2. 「修復方式 3」列出的模組清單含 `build/game`，但本專案的 `egretProperties.json`
+   實際沒有 `game` 模組。
+3. `GameModeTest/doc/Egret-5.4.1-Build-Deployment.md` 記錄的驗證基準為
+   Node.js 18.14.1 / npm 9.3.1，本機現況為 24.19.0 / 11.17.0，已漂移（build 實測仍通過）。
+4. `Test_build/doc/Egret-5.4.1-build-repair.md` 是舊短版，只到 build 驗證就結束。
+5. `Egret-5.4.1-develop.md` 素材節的範例列出 `assets/05.png`，但該檔實際不存在
+   （已在該節「現況備註」標註，尚未修正範例本身）。
 
 ## Build 操作
 
