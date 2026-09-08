@@ -7,6 +7,14 @@ declare module skins{
 	}
 }
 declare module skins{
+	class Test_Skin_1 extends eui.Skin{
+	}
+}
+declare module ui{
+	class TestGroupRoot extends eui.Group{
+	}
+}
+declare module skins{
 	class TestImg extends eui.Skin{
 	}
 }

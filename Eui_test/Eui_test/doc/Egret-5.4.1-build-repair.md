@@ -377,6 +377,56 @@ public numberImage: eui.Image;   // exml 裡的 id
 這類欄位由 eui 在套用 `skinName` 時於執行期注入，TypeScript 程式碼從頭到尾不會賦值，
 在 `strict` 下結構上不可能滿足檢查。任何 EUI 專案只要吃到 `strict` 都會被掃出一整排。
 
+#### `src/` 底下不能寫 `export` —— TS2354 tslib
+
+症狀（build 直接中斷，不是紅字）：
+
+```
+[tsl] ERROR in D:\...\src\testSkin\TestSkinForExml.ts(1,30)
+      TS2354: This syntax requires an imported helper but module 'tslib' cannot be found.
+```
+
+**根因鏈**：
+
+1. 本專案的 build 走 webpack + ts-loader（錯誤前綴 `[tsl]` 就是 ts-loader）——
+   `scripts/config.ts` 用的是 `WebpackBundlePlugin`，不是舊的 `CompilePlugin`
+2. bundler 硬塞了 `importHelpers`：
+
+```js
+// scripts/plugins/node_modules/@egret/egret-webpack-bundler/lib/index.js:186-193
+var compilerOptions = {
+    sourceMap: needSourceMap,
+    importHelpers: true,          // ★ helper 改成從 tslib 匯入
+    noEmitHelpers: true           // ★ 不再內嵌 __extends
+};
+config.resolve.alias = { 'tslib': require.resolve("tslib") };
+```
+
+3. 那個 `resolve.alias` **只對 webpack 打包有效，TypeScript 的型別檢查不看它**。
+   tsc 用一般模組解析從 `src/xxx/` 往上找 `node_modules/tslib` ——
+   本專案根目錄沒有 `node_modules`（只有 `scripts/plugins/node_modules`）→ 找不到 → TS2354
+4. `importHelpers` **只作用在 module 檔案上**。沒有 `import` / `export` 的檔案是 global script，
+   helper 一律內嵌，根本不碰 tslib
+
+**實測對照組**（兩檔內容只差一個 `export`，參數 `--target es5 --importHelpers --noEmitHelpers`）：
+
+```
+a_global.ts   class AGlobal extends eui.Component        → 通過
+b_module.ts   export class BModule extends eui.Component → TS2354
+```
+
+**修法**：拿掉 `export`，或包 `namespace`（兩者都維持 global script）。
+
+```typescript
+class TestSkinForExml extends eui.Component { ... }        // ✅
+namespace TestComp { export class Foo extends ... { } }    // ✅ namespace 內的 export 不算 module
+export class TestSkinForExml extends eui.Component { ... } // ❌ 整個檔案變成 module
+```
+
+裝 `tslib` 也能消掉錯誤，但**不該這樣修** —— 檔案一旦是 module，class 就不會掛上全域，
+`egret.getDefinitionByName()` / exml 的 `xmlns:ns1="*"` 全部找不到它
+（見 [Egret-EUI-Component-Lifecycle.md](Egret-EUI-Component-Lifecycle.md) §2.2 的 `$error 2003`）。
+
 ### 與其他文件的關係
 
 同目錄的 `Egret-5.4.1-develop.md` 在「EXML 元件與 TypeScript 欄位綁定」記錄了一條同源問題：

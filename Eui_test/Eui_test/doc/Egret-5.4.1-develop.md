@@ -250,23 +250,85 @@ GameModeTest 的 `movieclip` 群組是移植來源，尚未併入。
 
 ## EXML 與畫面尺寸
 
+### 結論：exml 是什麼
+
+> exml = 一份記錄畫面結構的格式；標籤指到哪個類別，runtime 就把那個物件 new 出來。
+> 你自己寫一個 class（`TestEui`）用 `skinName` 跟它關聯，就能操作標籤裡擺的東西（id ↔ 同名欄位）。
+> 唯一要注意：exml 是被編成 class 再 `eval`，標籤的類別必須在解析當下已在全域，否則整份掛掉（`$error 2003`）。
+
+以下兩節是拿其他引擎來對照，方便從既有經驗切進來，不影響上面的結論。
+
 ### 以 Cocos Creator 的概念理解 EXML
 
-EXML 不是單一 Node，而比較接近 Cocos Creator 的 UI Prefab 或場景中的一組 UI 節點結構。EXML 內的各個 EUI 元件才比較接近 Node 與其 Component。
+> 本節 Egret 側的敘述都經原始碼查證（見 [Egret-EUI-Component-Lifecycle.md](Egret-EUI-Component-Lifecycle.md)、
+> [Egret-EUI-Skin.md](Egret-EUI-Skin.md)）；Cocos 側是概念對照，未查 Cocos 原始碼。
 
-| Egret EUI | Cocos Creator 概念 |
-| --- | --- |
-| EXML 檔案 | UI Prefab 或一組 UI 節點結構 |
-| `Group` | Node |
-| `Image` | Node + Sprite |
-| `Label` | Node + Label |
-| `Button` | Node + Button |
-| Skin | UI 元件的外觀 Prefab |
-| TypeScript 類別 | 掛在 Node 上的 Component 腳本 |
-| `default.thm.json` | UI 類別與 Prefab／Skin 的對應設定 |
-| `default.res.json` | 資源索引或 Asset Bundle 設定 |
+#### 一句話：exml 不是 Prefab
 
-例如：
+| | Cocos Prefab | Egret exml |
+|---|---|---|
+| 本體 | 序列化的**資料**（JSON asset） | 一段 **JS 原始碼字串** |
+| 執行期怎麼變成東西 | `instantiate()` 反序列化 → 深拷貝節點樹 | `eval(code)` → 得到一個 **class**，再 `new`（`EXMLParser.ts:291`） |
+| 產物 | 節點樹實例 | 建構函式 |
+| 屬性怎麼套上去 | 反序列化寫回欄位 | **產碼時就寫死成一行行指派**（`t.width = 160; t.x = 0;`） |
+
+比喻上更接近 **Android 的 XML layout** 或 **Qt 的 `.ui`** ——「會被編譯成 class 的介面原始碼」，
+而不是 Prefab 那種「實例快照」。實跑 parser 的產物（本文件姊妹篇 §2.1）就是硬編碼的建構函式，不是資料。
+
+#### 比較單位不同，結論就不同
+
+**根是 `<e:Skin>` 的 exml 單獨拿出來，沒有東西可以放上舞台。** 實測：
+
+```
+skin instanceof egret.DisplayObject : false
+container.addChild(skin) : TypeError -> child.$setParent is not a function
+```
+
+`Skin extends egret.EventDispatcher`，不是顯示物件。真正上舞台的是你手寫的宿主：
+
+```
+new TestEui()  →  constructor 裡 new skins.TestImg()  →  setSkin() 把皮膚的子項
+                  「搬進 TestEui 自己的顯示樹」，skin 物件本身留在外面
+實測：skin.$elementsContent[0].parent === host  →  true
+```
+
+| 拿來比的單位 | Cocos 對應 |
+|---|---|
+| `TestImg.exml` **單獨一個檔案** | **沒有對應物**。它是「半個 Prefab」，沒有 `TestEui.ts` 就沒有東西能上場 |
+| `TestEui.ts` **＋** `TestImg.exml` 一組 | ✅ 這才等於一個「掛了腳本的 Prefab」 |
+| `TestGroupRoot.exml` 單獨一個檔案 | ✅ 一份檔案自己就等於 Prefab（根是 `<e:Group>`，產物本身就是顯示物件） |
+
+差別：Cocos 的 Prefab **一份檔案自己成立**（節點樹＋掛在上面的腳本都序列化在裡面）；
+EUI 的皮膚模式**硬性拆成兩份** —— 視覺在 exml、邏輯在 `.ts`，靠 `skinName` 字串在執行期綁。
+
+#### 逐項對照
+
+| Egret EUI | Cocos Creator | 差在哪 |
+|---|---|---|
+| exml（根是 `<e:Group>`） | Prefab | 最貼近的一個 |
+| exml（根是 `<e:Skin>`） | 沒有對應物 | 見上表 |
+| `eui.Group` | Node（＋ Layout component） | Group 自帶 layout，Cocos 是另外掛一顆 |
+| `eui.Image` / `Label` | Node ＋ Sprite / Label | **EUI 是繼承**（`Image extends egret.Bitmap`），Cocos 是 Node 掛 component 的**組合** |
+| exml 的 `id` → `partAdded` | `@property(Sprite) icon` ＋ 編輯器拖引用 | Cocos 在編輯期把引用序列化進 prefab；EUI 是**執行期用字串名比對**（`this[partName] = instance`），拼錯就是 undefined，編譯器不管 |
+| `left/right/top/bottom`、`percentWidth` | Widget | 最像的一組。差別：Widget 是掛在子節點上的 component，EUI 是子項的屬性、由父容器的 `BasicLayout` 求解 |
+| `VerticalLayout` / `TileLayout` | Layout component | 幾乎一樣，都掛在父容器上 |
+| `states` ＋ `alpha.down="0.5"` | 沒有通用等價物 | 勉強像 Button 的 transition；EUI 的 states 可覆寫任意屬性、增刪節點 |
+| `default.thm.json` | 沒有 | 一張全域的「元件類別 → 預設皮膚」表，Cocos 得自己 `resources.load` |
+| `default.res.json` | 資源索引 / Asset Bundle | — |
+
+#### Prefab 有、exml 沒有
+
+1. **巢狀 Prefab 的覆寫（overrides）** —— exml 巢狀就只是 `new` 別的 class（`<ns1:TestGroup width="200"/>`），屬性直接寫死在產碼裡，沒有「覆寫」概念
+2. **執行期可改的資料** —— exml `eval` 完就是 class，只能改實例
+3. **節點 UUID** —— exml 只有 `id` 字串，改名就斷
+
+#### exml 有、Prefab 沒有
+
+**換皮**：同一個 `TestEui` 改 `skinName` 就換一套外觀，`partRemoved` / `partAdded` 會自動跑（實測見 [Egret-EUI-Skin.md](Egret-EUI-Skin.md) §8.3 的 G 案例）。Cocos 得換整個 prefab。
+
+這條血統來自 **Flex 的 SkinnableComponent**，不是遊戲引擎那條線 —— 所以它在 Cocos 裡找不到對應物是正常的。
+
+#### 結構理解仍然成立
 
 ```xml
 <e:Skin xmlns:e="http://ns.egret.com/eui">
@@ -277,14 +339,67 @@ EXML 不是單一 Node，而比較接近 Cocos Creator 的 UI Prefab 或場景�
 </e:Skin>
 ```
 
-可用 Cocos Creator 的概念理解為：
+節點層級上可以這樣看：
 
 ```text
-Prefab
+（宿主元件 = 掛了腳本的 Node）
 └─ Group（Node）
    ├─ Image（Node + Sprite）
    └─ Label（Node + Label）
 ```
+
+只是要記得最外層那個 `<e:Skin>` **不是一個節點** —— 它是「一包子節點 ＋ skinParts 名單」，
+執行期會被拆開塞進宿主。
+
+### 以 Flash / AS3 的概念理解 EXML
+
+> Egret 側經原始碼查證；Flash / Flex 側是概念對照。
+
+#### exml 就是 MXML
+
+EUI 是 **Flex 4（Spark）架構的移植**，連方法名都照抄。前面文件裡幾個看起來莫名其妙的設計，用 Flex 一看就通：
+
+| Flex 4 / MXML | Egret EUI | 出處 |
+|---|---|---|
+| `.mxml` → mxmlc 編成 AS3 class | `.exml` → 產 JS 原始碼 → `eval` 成 class | `EXMLParser.ts:291` |
+| `<s:Skin>` | `<e:Skin>` | — |
+| `skinClass`（CSS） | `skinName` | `Component.ts:164` |
+| `[SkinPart]` metadata | `skinParts` 陣列 | `CodeFactory.ts:436` 產 getter |
+| `partAdded()` / `partRemoved()` | **同名** | `Component.ts:376, 407` |
+| `getCurrentSkinState()` | `getCurrentState()` | `Component.ts:578` |
+| `[HostComponent("...")]` metadata | `<w:HostComponent name="..."/>` | 編輯器留著讀但沒人用的死欄位，見 [Egret-EUI-Skin.md](Egret-EUI-Skin.md) §7.5.1 |
+| skin 內用 `hostComponent.xxx` | **同名**，parser 自動補前綴 | `EXMLParser.ts:1117` |
+| `alpha.down="0.5"` 狀態屬性語法 | **同語法** | `EXMLParser.ts:524-526`；`ButtonSkin.exml` 就有 `alpha.disabled="0.5"` |
+| `<fx:Declarations>` | `<w:Declarations>` | `EXMLParser.ts:44` |
+| `SkinnableComponent` | `eui.Component` | — |
+| `Group` / `BasicLayout` / `VerticalLayout` | **全部同名** | — |
+| `left/right/top/bottom`、`percentWidth` | **全部同名** | — |
+
+→ 「Skin 為什麼要拆成兩個 class」的答案在這裡：它不是遊戲引擎的設計，是 Flex 的血統。
+
+#### 只講純 Flash：Library symbol + Export for ActionScript
+
+| Flash IDE | Egret exml |
+|---|---|
+| Library 裡擺好美術的 MovieClip symbol | 一份 exml |
+| 勾 **Export for ActionScript** ＋ 填 **Class** 欄位 | `class="skins.TestImg"` |
+| Symbol Properties 的 **Base class** 欄位 | **根標籤**（決定 extends 誰） |
+| 子項的 **instance name** → 自動變成類別屬性 `this.icon` | `id` → `this.numberImage` |
+| `new MySymbol()` 得到一個 MovieClip 子類 | `new skins.TestImg()` 得到一個 class |
+
+**Base class 欄位**那條就是 [Egret-EUI-Component-Lifecycle.md](Egret-EUI-Component-Lifecycle.md) §2.4.2 的「反向繼承模式」——
+Flash 裡填自己的類別，生成的 symbol 就 extends 你的類別；exml 把根標籤指到自訂 class 是同一回事。
+
+`this.icon` vs `getChildByName('icon')`、拼錯 instance name 就拿到 undefined —— Flash 時代一模一樣的坑。
+
+#### 差異
+
+| | Flash symbol | exml |
+|---|---|---|
+| 儲存形式 | SWF 內的**二進位序列化資料** | **產原始碼再 eval** |
+| 屬性 | 反序列化寫回 | 編譯進建構函式的硬編碼指派（`t.width = 160;`） |
+| 時間軸 / frame label / `gotoAndPlay` | 有 | **沒有**。states 取代 frame label（`currentState = "down"` ≈ `gotoAndStop("down")`），補間交給 `egret.Tween` |
+| 測量 / 失效系統 | 沒有 | 有（`invalidateSize` → `measure` → `updateDisplayList`），Flex 帶進來的 |
 
 ### EXML 尺寸是否需要等於輸出解析度
 

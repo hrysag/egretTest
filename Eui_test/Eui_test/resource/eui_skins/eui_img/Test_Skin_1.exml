@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<e:Skin class="skins.Test_Skin_1"
+	 width="160"
+	height="384" xmlns:e="http://ns.egret.com/eui">
+	<e:Image fillMode="scale" touchEnabled="false" source="test_073_png" width="160" height="384" y="0" x="0" visible="true"/>
+</e:Skin>

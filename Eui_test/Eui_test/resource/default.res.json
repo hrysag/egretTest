@@ -145,6 +145,11 @@
 		"name": "test_02_png",
 		"type": "image",
 		"url": "assets/test/02.png"
+		},
+		{
+		"name": "test_073_png",
+		"type": "image",
+		"url": "assets/test/073.png"
 		}
 	]
 }

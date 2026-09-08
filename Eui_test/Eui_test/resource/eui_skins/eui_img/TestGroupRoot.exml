@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<e:Group class="ui.TestGroupRoot" width="400" height="300" xmlns:e="http://ns.egret.com/eui">
+	<e:layout>
+		<e:VerticalLayout gap="10" paddingTop="20" paddingLeft="20"/>
+	</e:layout>
+	<e:Image id="icon" source="test_05_png" width="160" height="128"/>
+	<e:Image id="icon2" source="test_02_png" width="157" height="108"/>
+</e:Group>

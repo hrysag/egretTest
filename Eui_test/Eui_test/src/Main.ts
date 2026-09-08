@@ -76,6 +76,40 @@ class Main extends eui.UILayer {
         console.log('check_target',target.numberImage);
         //--需要再exml設定name屬性欄位
         console.log('check_img',target.getChildByName('numberImage'));
+        //=====================================================================
+        //--exml 不一定要用 <e:Skin> 當根標籤
+        //--
+        //--EXMLParser.startCompile() (exml/EXMLParser.ts:405-407)：
+        //--    let superClass = this.getClassNameOfNode(this.currentXML);
+        //--    this.currentClass.superClass = superClass;
+        //--→ 根標籤是什麼,eval 出來的 class 就 extends 什麼
+        //--   <e:Skin>  → extends eui.Skin  (不是顯示物件,要靠宿主的 skinName 去接)
+        //--   <e:Group> → extends eui.Group (本身就是顯示物件,直接 new 直接 addChild)
+        //--   <ns1:自訂class> → extends 你的 class (邏輯寫在 .ts,視覺擺在 exml)
+        //--
+        //--TestGroupRoot.exml 的根是 <e:Group>,所以它跟 TestEui 是完全不同的用法:
+        //--   TestEui        = 宿主(extends eui.Component) + skins.TestImg(extends eui.Skin) 兩個 class
+        //--   TestGroupRoot  = 只有一個 class,不需要宿主、沒有 skinName、沒有 partAdded
+        //--
+        //--限制:根標籤要放子節點的話,該 class 必須有登記 @defaultProperty
+        //--     (Skin/Group 的 elementsContent、DataGroup 的 dataProvider ...)
+        //--     egret.Sprite 沒登記 → 放子節點會噴 $error 2012
+        //=====================================================================
+        const g = new ui.TestGroupRoot();
+        g.x = 50; g.y = 600;
+        this.stage.addChild(g);
+        //--子節點的 id 直接就是屬性,不用等 partAdded(它根本沒有這東西)
+        //--但 build 產的 libs/exml.e.d.ts 只寫 "class TestGroupRoot extends eui.Group{}",
+        //--不會宣告 icon/icon2 這些欄位 (tools/actions/exml.js:241 拼字串就只有空的 class body)
+        //--→ 型別上拿不到,要嘛 as any,要嘛自己補一份 declare
+        console.log('check_group_child', (g as any).icon);
+        //--注意:要先跑一次 egret build
+        //--     編輯器建立的 exml 不會自動登記,是 ExmlPlugin(tools/tasks/exml.ts:30) 在 build 時
+        //--     ① 依 autoGenerateExmlsList 把它補進 default.thm.json 的 exmls
+        //--     ② 重新產生 libs/exml.e.d.ts
+        //--     沒 build 的話 theme 不會解析它,ui.TestGroupRoot 執行期根本不存在
+
+
     }
 
     private async loadResource() {

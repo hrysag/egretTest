@@ -116,10 +116,20 @@ var Main = (function (_super) {
                     case 4:
                         userInfo = _a.sent();
                         console.log(userInfo);
+                        //--for test--
+                        this.test();
                         return [2 /*return*/];
                 }
             });
         });
+    };
+    Main.prototype.test = function () {
+        var target = new TestEui();
+        this.stage.addChild(target);
+        console.log('check_target', target.numberImage);
+        //--需要再exml設定name屬性欄位
+        console.log('check_img', target.getChildByName('numberImage'));
+        //---
     };
     Main.prototype.loadResource = function () {
         return __awaiter(this, void 0, void 0, function () {
